@@ -291,9 +291,9 @@ func TestOIDCGroupMembershipReconciliationPreservesManualMembership(t *testing.T
 		manualTenantID := uuid.New()
 		syncedTenantID := uuid.New()
 		for tenantID, name := range map[uuid.UUID]string{
-			managedTenantID: "OIDC managed tenant",
-			manualTenantID:  "Manually managed tenant",
-			syncedTenantID:  "Synchronized tenant",
+			managedTenantID: "oidc_managed_membership",
+			manualTenantID:  "manual_membership",
+			syncedTenantID:  "synced_membership",
 		} {
 			if _, err := dbConf.Pool.Exec(ctx, `INSERT INTO "Tenant" ("id", "name", "slug") VALUES ($1, $2, $3)`, tenantID, name, tenantID.String()); err != nil {
 				return err
@@ -397,7 +397,7 @@ func TestDatabaseOIDCGroupMembershipReconciliation(t *testing.T) {
 		ctx := context.Background()
 		queries := sqlcv1.New()
 		tenantID := uuid.New()
-		if _, err := dbConf.Pool.Exec(ctx, `INSERT INTO "Tenant" ("id", "name", "slug") VALUES ($1, $2, $3)`, tenantID, "Database mapped tenant", tenantID.String()); err != nil {
+		if _, err := dbConf.Pool.Exec(ctx, `INSERT INTO "Tenant" ("id", "name", "slug") VALUES ($1, $2, $3)`, tenantID, "database_group_mapping", tenantID.String()); err != nil {
 			return err
 		}
 		defer dbConf.Pool.Exec(ctx, `DELETE FROM "Tenant" WHERE "id" = $1`, tenantID) //nolint:errcheck
@@ -461,7 +461,7 @@ func TestCurrentOIDCMembershipReconciliation(t *testing.T) {
 		}
 
 		newTenantID := uuid.New()
-		if _, err := dbConf.Pool.Exec(ctx, `INSERT INTO "Tenant" ("id", "name", "slug") VALUES ($1, $2, $3)`, newTenantID, "New tenant", newTenantID.String()); err != nil {
+		if _, err := dbConf.Pool.Exec(ctx, `INSERT INTO "Tenant" ("id", "name", "slug") VALUES ($1, $2, $3)`, newTenantID, "tenant_created_after_login", newTenantID.String()); err != nil {
 			return err
 		}
 		defer dbConf.Pool.Exec(ctx, `DELETE FROM "Tenant" WHERE "id" = $1`, newTenantID) //nolint:errcheck

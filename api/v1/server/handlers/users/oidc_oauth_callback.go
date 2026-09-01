@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -92,11 +93,16 @@ func (u *UserService) upsertOIDCUserFromClaims(ctx context.Context, config *serv
 	if err := u.checkUserRestrictionsForEmail(config, claims.Email); err != nil {
 		return nil, err
 	}
-	releaseSubjectLock, err := acquireOIDCSubjectLock(ctx, config, claims.Issuer, claims.Sub)
+	// Both the subject and the email decide which account this login binds to, so concurrent
+	// logins racing on either one must serialize.
+	releaseLocks, err := acquireOIDCLocks(ctx, config,
+		"sub\n"+claims.Issuer+"\n"+claims.Sub,
+		"email\n"+strings.ToLower(claims.Email),
+	)
 	if err != nil {
 		return nil, err
 	}
-	defer releaseSubjectLock()
+	defer releaseLocks()
 
 	emailVerified := claims.EmailVerified || config.Auth.ConfigFile.SetEmailVerified
 
@@ -189,7 +195,7 @@ func (u *UserService) upsertOIDCUserFromClaims(ctx context.Context, config *serv
 	return user, nil
 }
 
-func acquireOIDCSubjectLock(ctx context.Context, config *server.ServerConfig, issuer, subject string) (func(), error) {
+func acquireOIDCLocks(ctx context.Context, config *server.ServerConfig, keys ...string) (func(), error) {
 	if config.Layer == nil || config.Layer.Pool == nil {
 		return nil, fmt.Errorf("OIDC authentication requires a database")
 	}
@@ -197,15 +203,23 @@ func acquireOIDCSubjectLock(ctx context.Context, config *server.ServerConfig, is
 	if err != nil {
 		return nil, err
 	}
-	lockKey := issuer + "\n" + subject
-	if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock(hashtextextended($1, 0))", lockKey); err != nil {
+	// Sorted so concurrent callbacks always take the locks in the same order.
+	slices.Sort(keys)
+	acquired := make([]string, 0, len(keys))
+	release := func() {
+		for _, key := range acquired {
+			_, _ = conn.Exec(context.Background(), "SELECT pg_advisory_unlock(hashtextextended($1, 0))", key)
+		}
 		conn.Release()
-		return nil, err
 	}
-	return func() {
-		_, _ = conn.Exec(context.Background(), "SELECT pg_advisory_unlock(hashtextextended($1, 0))", lockKey)
-		conn.Release()
-	}, nil
+	for _, key := range keys {
+		if _, err := conn.Exec(ctx, "SELECT pg_advisory_lock(hashtextextended($1, 0))", key); err != nil {
+			release()
+			return nil, err
+		}
+		acquired = append(acquired, key)
+	}
+	return release, nil
 }
 
 type oidcClaims struct {

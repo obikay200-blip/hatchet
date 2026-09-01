@@ -20,7 +20,7 @@ func TestTenantOIDCGroupMappingPersistence(t *testing.T) {
 		repo := db.V1.Tenant()
 
 		if _, err := repo.CreateTenant(ctx, &v1.CreateTenantOpts{
-			Name: "Invalid owner mapping",
+			Name: "owner_role_mapping_rejected",
 			Slug: "invalid-owner-" + uuid.NewString(),
 			OIDCGroupMapping: &v1.UpsertTenantOIDCGroupMappingOpts{
 				Issuer: "https://issuer.example.com",
@@ -32,7 +32,7 @@ func TestTenantOIDCGroupMappingPersistence(t *testing.T) {
 		}
 
 		tenant, err := repo.CreateTenant(ctx, &v1.CreateTenantOpts{
-			Name: "Mapped tenant",
+			Name: "issuer_scoped_group_mapping",
 			Slug: "mapped-tenant-" + uuid.NewString(),
 			OIDCGroupMapping: &v1.UpsertTenantOIDCGroupMappingOpts{
 				Issuer: "https://issuer.example.com",

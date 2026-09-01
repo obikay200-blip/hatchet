@@ -200,9 +200,10 @@ func (a *AuthN) handleCookieAuth(c echo.Context) error {
 
 		return fmt.Errorf("error getting user by id: %w", err)
 	}
+	// Provider outages fall back to the memberships persisted by the last successful check
+	// rather than locking every session out.
 	if err := ReconcileCurrentOIDCMemberships(c.Request().Context(), a.config, user.ID); err != nil {
 		a.l.Warn().Ctx(ctx).Err(err).Msg("could not reconcile current OIDC memberships")
-		return forbidden
 	}
 
 	c.Set("user", user)
@@ -289,6 +290,10 @@ func (a *AuthN) handleBearerAuth(c echo.Context) error {
 			}
 
 			return fmt.Errorf("error getting user by id from exchange token: %w", getUserErr)
+		}
+
+		if err := ReconcileCurrentOIDCMemberships(c.Request().Context(), a.config, user.ID); err != nil {
+			a.l.Warn().Ctx(ctx).Err(err).Msg("could not reconcile current OIDC memberships")
 		}
 
 		// important: user is validated later in the authz step
